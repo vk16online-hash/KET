@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nova voice</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#14110f">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#14110f;--panel:#201b18;--ink:#f1e9e2;--dim:#9a8d84;--red:#ff2a1f;--line:#3a312c}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{padding:16px 18px 8px;display:flex;justify-content:space-between;align-items:center}
+h1{font:600 20px/1 "Courier New",monospace;letter-spacing:.2em;margin:0}
+button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+#scanner{margin:6px 18px 14px;height:22px;background:#000;border:1px solid var(--line);border-radius:6px;position:relative;overflow:hidden}
+#scanner i{position:absolute;top:3px;bottom:3px;width:22%;border-radius:4px;background:linear-gradient(90deg,transparent,var(--red),transparent);box-shadow:0 0 18px var(--red);animation:sweep 2.4s ease-in-out infinite alternate}
+body.hear #scanner i,body.talk #scanner i{animation-duration:.7s}
+@keyframes sweep{from{left:0}to{left:78%}}
+#log{flex:1;overflow:auto;padding:0 18px;display:flex;flex-direction:column;gap:10px}
+#log div{max-width:85%;padding:10px 14px;border-radius:14px;background:var(--panel);overflow-wrap:anywhere}
+#log .me{align-self:flex-end;background:#3a1512}#log a{color:#ff8a80}
+video{margin:0 18px 10px;border-radius:12px;max-height:30vh;object-fit:cover}
+footer{padding:12px 18px;display:flex;gap:8px;align-items:center}
+input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+#mic{width:64px;height:64px;border-radius:50%;border:2px solid var(--red);background:#2a0f0c;font-size:26px;padding:0}
+body.hear #mic{background:var(--red);box-shadow:0 0 24px var(--red)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){#scanner i{animation:none;left:39%}}
+</style></head><body>
+<header><h1>NOVA</h1><div><button id="inst" hidden>Install</button> <button id="lang">English</button></div></header>
+<div id="scanner"><i></i></div>
+<div id="log" aria-live="polite"></div>
+<video id="cam" hidden playsinline muted></video>
+<footer><input id="txt" placeholder="Type a command" enterkeyhint="send"><button id="mic" aria-label="Talk">🎙</button></footer>
+<script>
+const $=s=>document.querySelector(s),NAME='Nova';
+let lang='en-US';
+const JOKES=["Why did the engine go to school? To improve its torque.","I told my car a joke. It just drove off.","Why don't pistons gossip? They keep things compressed."];
+function log(t,c){const d=document.createElement('div');d.className=c;d.textContent=t;$('#log').append(d);d.scrollIntoView();return d}
+function link(u,l){const d=log('','bot'),a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener';a.textContent=l||u;d.append(a);window.open(u,'_blank')}
+function say(t){log(t,'bot');if(!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=lang;
+ const v=speechSynthesis.getVoices().find(v=>v.lang.replace('_','-')===lang);if(v)u.voice=v;
+ u.onstart=()=>document.body.classList.add('talk');u.onend=u.onerror=()=>document.body.classList.remove('talk');speechSynthesis.speak(u)}
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function listen(){if(!SR)return say('Voice input needs Chrome. You can still type.');
+ const r=new SR();r.lang=lang;r.onstart=()=>document.body.classList.add('hear');r.onend=()=>document.body.classList.remove('hear');
+ r.onresult=e=>handle(e.results[0][0].transcript);r.onerror=e=>log('Mic problem: '+e.error+'. Allow microphone access and try again.','bot');r.start()}
+async function wiki(t){const w=lang.startsWith('si')?'si':'en';
+ try{const s=await(await fetch(`https://${w}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(t)}&limit=1&format=json&origin=*`)).json();
+ if(!s[1][0])return say("I couldn't find that. Try rephrasing.");
+ const r=await(await fetch(`https://${w}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(s[1][0])}`)).json();
+ say(r.extract.split('. ').slice(0,2).join('. ').replace(/\.?$/,'.'))}catch{say('I need an internet connection for that.')}}
+async function scan(){if(!('BarcodeDetector'in window))return say('QR scanning is not supported in this browser.');
+ try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}),v=$('#cam');v.srcObject=s;v.hidden=false;await v.play();
+ const d=new BarcodeDetector();say('Scanning. Point the camera at a code.');
+ const t=setInterval(async()=>{const c=await d.detect(v).catch(()=>[]);if(c[0]){clearInterval(t);s.getTracks().forEach(x=>x.stop());v.hidden=true;
+ const x=c[0].rawValue;say('The code says: '+x);if(/^https?:/.test(x))link(x,'Open link')}},400)}catch{say('Camera access was blocked. Allow it in site settings.')}}
+function handle(raw){log(raw,'me');const q=raw.toLowerCase().trim();let m;
+ if(/වේලාව|වෙලාව|\btime\b/.test(q))return say('It is '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}));
+ if(/\b(date|today)\b/.test(q))return say(new Date().toLocaleDateString([],{weekday:'long',month:'long',day:'numeric'}));
+ if(/joke/.test(q))return say(JOKES[Math.random()*JOKES.length|0]);
+ if(/\b(hello|hi|hey)\b/.test(q))return say('Hello. I am '+NAME+'. How can I help?');
+ if(m=q.match(/timer for (\d+) (second|minute|hour)/)){const ms=m[1]*({second:1,minute:60,hour:3600}[m[2]])*1000;setTimeout(()=>say('Your timer is done.'),ms);return say(`Timer set for ${m[1]} ${m[2]}${m[1]>1?'s':''}.`)}
+ if(/\b(scan|qr|barcode)\b/.test(q))return scan();
+ if(/\bnews\b/.test(q)){say('Opening the news.');return link('https://news.google.com')}
+ if(m=q.match(/^(?:open|browse|go to) (.+)/)){const n=m[1].replace(/\s/g,'');say('Opening '+m[1]+'.');return link(n.includes('.')?'https://'+n:`https://www.${n}.com`)}
+ if(m=q.match(/^(?:search|google) (?:for )?(.+)/)){say('Searching for '+m[1]+'.');return link('https://www.google.com/search?q='+encodeURIComponent(m[1]))}
+ m=q.match(/^(?:what is|what's|who is|who was|tell me about|find me about|do you know about) (?:a |an |the )?(.+)/);
+ return wiki(m?m[1]:q)}
+$('#mic').onclick=listen;
+$('#txt').onkeydown=e=>{if(e.key==='Enter'&&e.target.value.trim()){handle(e.target.value);e.target.value=''}};
+$('#lang').onclick=e=>{lang=lang==='en-US'?'si-LK':'en-US';e.target.textContent=lang==='en-US'?'English':'සිංහල'};
+let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('#inst').hidden=false});
+$('#inst').onclick=async()=>{dp.prompt();await dp.userChoice;$('#inst').hidden=true};
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+log('Hi, I am '+NAME+'. Tap the mic and try: "what is a galaxy", "open youtube", "timer for 5 minutes", "scan a code".','bot');
+</script></body></html>
