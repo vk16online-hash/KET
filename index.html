@@ -26,7 +26,7 @@ body.hear #mic{background:var(--red);box-shadow:0 0 24px var(--red)}
 button:focus-visible,input:focus-visible{outline:2px solid var(--red);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){#scanner i{animation:none;left:39%}}
 </style></head><body>
-<header><h1>NOVA</h1><div><button id="inst" hidden>Install</button> <button id="lang">English</button></div></header>
+<header><h1>NOVA</h1><div><button id="inst" hidden>Install</button> <button id="snd">Sound on</button> <button id="lang">English</button></div></header>
 <div id="scanner"><i></i></div>
 <div id="log" aria-live="polite"></div>
 <video id="cam" hidden playsinline muted></video>
@@ -37,11 +37,22 @@ let lang='en-US';
 const JOKES=["Why did the engine go to school? To improve its torque.","I told my car a joke. It just drove off.","Why don't pistons gossip? They keep things compressed."];
 function log(t,c){const d=document.createElement('div');d.className=c;d.textContent=t;$('#log').append(d);d.scrollIntoView();return d}
 function link(u,l){const d=log('','bot'),a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener';a.textContent=l||u;d.append(a);window.open(u,'_blank')}
-function say(t){log(t,'bot');if(!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=lang;
+let AC,sc,snd=true;
+function unlock(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.resume()}catch{}}
+function scanSound(on){if(sc){sc.stop();sc=null}if(!on||!snd||!AC)return;
+ const t=AC.currentTime,o=AC.createOscillator(),f=AC.createBiquadFilter(),g=AC.createGain(),l=AC.createOscillator(),lg=AC.createGain(),pl=AC.createOscillator(),p=AC.createStereoPanner();
+ o.type='sawtooth';o.frequency.value=98;f.type='lowpass';f.Q.value=9;f.frequency.value=700;
+ l.frequency.value=1.4;lg.gain.value=550;l.connect(lg);lg.connect(f.frequency);
+ pl.frequency.value=1.4;pl.connect(p.pan);
+ g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.05,t+.2);
+ o.connect(f);f.connect(g);g.connect(p);p.connect(AC.destination);
+ [o,l,pl].forEach(x=>x.start());
+ sc={stop(){const n=AC.currentTime;g.gain.cancelScheduledValues(n);g.gain.setValueAtTime(g.gain.value,n);g.gain.exponentialRampToValueAtTime(.0001,n+.25);setTimeout(()=>[o,l,pl].forEach(x=>x.stop()),300)}}}
+function say(t){log(t,'bot');if(!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=lang;u.pitch=.7;u.rate=.92;
  const v=speechSynthesis.getVoices().find(v=>v.lang.replace('_','-')===lang);if(v)u.voice=v;
- u.onstart=()=>document.body.classList.add('talk');u.onend=u.onerror=()=>document.body.classList.remove('talk');speechSynthesis.speak(u)}
+ u.onstart=()=>{document.body.classList.add('talk');scanSound(true)};u.onend=u.onerror=()=>{document.body.classList.remove('talk');scanSound(false)};speechSynthesis.speak(u)}
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-function listen(){if(!SR)return say('Voice input needs Chrome. You can still type.');
+function listen(){unlock();if(!SR)return say('Voice input needs Chrome. You can still type.');
  const r=new SR();r.lang=lang;r.onstart=()=>document.body.classList.add('hear');r.onend=()=>document.body.classList.remove('hear');
  r.onresult=e=>handle(e.results[0][0].transcript);r.onerror=e=>log('Mic problem: '+e.error+'. Allow microphone access and try again.','bot');r.start()}
 async function wiki(t){const w=lang.startsWith('si')?'si':'en';
@@ -67,7 +78,8 @@ function handle(raw){log(raw,'me');const q=raw.toLowerCase().trim();let m;
  m=q.match(/^(?:what is|what's|who is|who was|tell me about|find me about|do you know about) (?:a |an |the )?(.+)/);
  return wiki(m?m[1]:q)}
 $('#mic').onclick=listen;
-$('#txt').onkeydown=e=>{if(e.key==='Enter'&&e.target.value.trim()){handle(e.target.value);e.target.value=''}};
+$('#snd').onclick=e=>{snd=!snd;if(!snd)scanSound(false);e.target.textContent=snd?'Sound on':'Sound off'};
+$('#txt').onkeydown=e=>{if(e.key==='Enter'&&e.target.value.trim()){unlock();handle(e.target.value);e.target.value=''}};
 $('#lang').onclick=e=>{lang=lang==='en-US'?'si-LK':'en-US';e.target.textContent=lang==='en-US'?'English':'සිංහල'};
 let dp;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('#inst').hidden=false});
 $('#inst').onclick=async()=>{dp.prompt();await dp.userChoice;$('#inst').hidden=true};
